@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canteen Status</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: sans-serif; background: #f4f4f4; color: #222; min-height: 100vh; }
+  nav {
+    background: #222; padding: 12px 20px;
+    display: flex; align-items: center;
+  }
+  nav .brand { color: #fff; font-size: 15px; font-weight: bold; flex: 1; }
+  nav a { color: #aaa; font-size: 13px; text-decoration: none; }
+  nav a:hover { color: #fff; }
+  .page {
+    max-width: 680px; margin: 0 auto;
+    padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .card { background: #fff; border: 1px solid #ddd; padding: 24px 22px; }
+  .card-title {
+    font-size: 11px; font-weight: bold; text-transform: uppercase;
+    letter-spacing: 0.8px; color: #aaa; margin-bottom: 16px;
+  }
+  .status-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .big-status {
+    font-size: clamp(42px, 12vw, 68px); font-weight: bold;
+    line-height: 1; transition: color 0.4s;
+  }
+  .status-detail { flex: 1; min-width: 160px; }
+  .status-label { font-size: 16px; font-weight: bold; margin-bottom: 6px; }
+  .status-sub { font-size: 13px; color: #888; margin-bottom: 14px; }
+  .bar-wrap { background: #eee; height: 10px; width: 100%; overflow: hidden; border-radius: 5px; }
+  .bar-fill { height: 100%; border-radius: 5px; transition: width 0.5s ease, background 0.4s; }
+  .chart-wrap { position: relative; width: 100%; height: 180px; }
+  canvas { width: 100% !important; }
+  .refresh-note { text-align: center; font-size: 11px; color: #ccc; margin-top: 4px; }
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">🍽 Canteen</span>
+  <a href="/">← Back</a>
+</nav>
+<div class="page">
+  <div class="card">
+    <div class="card-title">Right now</div>
+    <div class="status-row">
+      <div class="big-status" id="pct-display">–%</div>
+      <div class="status-detail">
+        <div class="status-label" id="status-label">Loading…</div>
+        <div class="status-sub" id="status-sub">Checking occupancy…</div>
+        <div class="bar-wrap">
+          <div class="bar-fill" id="bar" style="width:0%;background:#2e7d32;"></div>
+        </div>
+      </div>
+    </div>
+    <p class="refresh-note" id="refresh-note">Connecting…</p>
+  </div>
+  <div class="card">
+    <div class="card-title">Today — occupancy by hour</div>
+    <div class="chart-wrap"><canvas id="chart-hourly"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Last 7 days — peak occupancy</div>
+    <div class="chart-wrap"><canvas id="chart-weekly"></canvas></div>
+  </div>
+</div>
+<script>
+  const CAPACITY = {{ capacity }};
+
+  function getColor(pct) {
+    if (pct < 50) return '#2e7d32';
+    if (pct < 75) return '#f57f17';
+    if (pct < 90) return '#e65100';
+    return '#c62828';
+  }
+
+  function getStatus(pct) {
+    if (pct < 50) return ['🟢 Quiet',       'Plenty of space available'];
+    if (pct < 75) return ['🟡 Moderate',     'Some seats still available'];
+    if (pct < 90) return ['🟠 Busy',         'Limited seats remaining'];
+    return              ['🔴 Almost full',   'Very limited space left'];
+  }
+
+  function drawBarChart(canvasId, labels, values, capacity, highlightLatest) {
+    const canvas = document.getElementById(canvasId);
+    const ctx    = canvas.getContext('2d');
+    const dpr    = window.devicePixelRatio || 1;
+    const W      = canvas.parentElement.clientWidth;
+    const H      = 180;
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.scale(dpr, dpr);
+
+    const padL = 28, padR = 10, padT = 10, padB = 28;
+    const chartW = W - padL - padR;
+    const chartH = H - padT - padB;
+    const n      = labels.length;
+    const barW   = Math.max(4, (chartW / n) * 0.65);
+    const gap    = chartW / n;
+    const maxVal = Math.max(capacity, ...values, 1);
+
+    ctx.clearRect(0, 0, W, H);
+
+    const capY = padT + chartH - (capacity / maxVal) * chartH;
+    ctx.beginPath();
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = '#e05555';
+    ctx.lineWidth   = 1;
+    ctx.moveTo(padL, capY);
+    ctx.lineTo(padL + chartW, capY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#e05555';
+    ctx.font      = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('max', padL + 2, capY - 3);
+
+    ctx.strokeStyle = '#f0f0f0';
+    ctx.lineWidth   = 1;
+    [0.25, 0.5, 0.75].forEach(f => {
+      const y = padT + chartH * (1 - f);
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(padL + chartW, y);
+      ctx.stroke();
+    });
+
+    values.forEach((v, i) => {
+      const x    = padL + i * gap + (gap - barW) / 2;
+      const pct  = v / maxVal;
+      const bh   = Math.max(pct * chartH, v > 0 ? 2 : 0);
+      const y    = padT + chartH - bh;
+      const vpct = Math.round((v / CAPACITY) * 100);
+      const isLast = highlightLatest && i === values.length - 1;
+      ctx.fillStyle = isLast
+        ? getColor(vpct)
+        : (vpct >= 90 ? '#ffcdd2' : vpct >= 75 ? '#ffe0b2' : vpct >= 50 ? '#fff9c4' : '#c8e6c9');
+      ctx.fillRect(x, y, barW, bh);
+      ctx.fillStyle = '#aaa';
+      ctx.font      = '9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(labels[i], x + barW / 2, H - padB + 12);
+    });
+
+    ctx.beginPath();
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth   = 1;
+    ctx.moveTo(padL, padT + chartH);
+    ctx.lineTo(padL + chartW, padT + chartH);
+    ctx.stroke();
+  }
+
+  async function refreshStatus() {
+    try {
+      const data   = await (await fetch('/api/canteen')).json();
+      const inside = data.inside;
+      const pct    = Math.min(100, Math.round((inside / CAPACITY) * 100));
+      const color  = getColor(pct);
+      const [lbl, sub] = getStatus(pct);
+      document.getElementById('pct-display').textContent  = pct + '%';
+      document.getElementById('pct-display').style.color  = color;
+      document.getElementById('status-label').textContent = lbl;
+      document.getElementById('status-sub').textContent   = sub;
+      const bar = document.getElementById('bar');
+      bar.style.width      = pct + '%';
+      bar.style.background = color;
+      document.getElementById('refresh-note').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    } catch(e) {
+      document.getElementById('refresh-note').textContent = 'Connection error — retrying…';
+    }
+  }
+
+  async function refreshCharts() {
+    try {
+      const h = await (await fetch('/api/canteen/history')).json();
+      const hourLabels = Array.from({length: 24}, (_, i) => i % 2 === 0 ? (i < 10 ? '0'+i : ''+i) : '');
+      drawBarChart('chart-hourly', hourLabels, h.hourly, h.capacity, true);
+      drawBarChart('chart-weekly', h.weekly_labels, h.weekly_peaks, h.capacity, false);
+    } catch(e) {}
+  }
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(refreshCharts, 150);
+  });
+
+  refreshStatus();
+  refreshCharts();
+  setInterval(refreshStatus, 500);
+  setInterval(refreshCharts, 60000);
+</script>
+</body>
+</html>

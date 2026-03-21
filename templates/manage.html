@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RFID — Manage Users</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: sans-serif; font-size: 14px; background: #f4f4f4; color: #222; }
+  a { text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  nav {
+    background: #222; padding: 0 16px;
+    display: flex; align-items: center; height: 48px; position: relative;
+  }
+  .nav-links { display: flex; align-items: center; gap: 16px; flex: 1; }
+  nav a.nav-link { color: #fff; font-size: 14px; white-space: nowrap; }
+  nav a.nav-link.active { color: #f0a500; font-weight: bold; }
+  nav a.nav-link.danger { color: #e05555; }
+  .nav-right { margin-left: auto; color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  .nav-right a { color: #e05555; font-size: 12px; }
+  .hamburger {
+    display: none; background: none; border: none; cursor: pointer;
+    padding: 8px; margin-left: auto; flex-direction: column; gap: 5px;
+  }
+  .hamburger span { display: block; width: 22px; height: 2px; background: #fff; }
+  .nav-drawer {
+    display: none; flex-direction: column; background: #2a2a2a;
+    position: absolute; top: 48px; left: 0; right: 0; z-index: 200;
+    padding: 8px 0; border-top: 1px solid #444;
+  }
+  .nav-drawer.open { display: flex; }
+  .nav-drawer a { color: #fff; padding: 12px 20px; font-size: 14px; border-bottom: 1px solid #333; }
+  .nav-drawer a.active { color: #f0a500; }
+  .nav-drawer a.danger { color: #e05555; }
+  @media (max-width: 640px) {
+    .nav-links { display: none; }
+    .nav-right  { display: none; }
+    .hamburger  { display: flex; }
+  }
+  .flash { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid #ddd; background: #fff; }
+  .flash.ok  { color: #2e7d32; }
+  .flash.err { color: #c62828; }
+  .controls { background: #fff; border-bottom: 1px solid #ddd; display: flex; flex-wrap: wrap; }
+  .form-box { padding: 14px 16px; border-right: 1px solid #ddd; flex: 2; min-width: 260px; }
+  .form-box:last-child { border-right: none; flex: 1; min-width: 200px; }
+  .form-box h3 { font-size: 12px; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .form-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field label { font-size: 11px; color: #888; }
+  input[type="text"], select {
+    border: 1px solid #ccc; padding: 8px; font-size: 16px;
+    background: #fff; color: #222; outline: none; width: 100%;
+  }
+  input[type="text"]:focus, select:focus { border-color: #222; }
+  input[type="file"] { font-size: 13px; padding: 4px 0; display: block; margin-bottom: 8px; }
+  button {
+    background: #222; color: #fff; border: none;
+    padding: 9px 16px; font-size: 13px; cursor: pointer; touch-action: manipulation;
+  }
+  button:hover { background: #444; }
+  .status-bar {
+    background: #fff; border-bottom: 1px solid #ddd;
+    padding: 7px 16px; font-size: 13px; color: #555; display: flex; gap: 20px; flex-wrap: wrap;
+  }
+  .grid { display: flex; height: calc(100vh - 175px); }
+  @media (max-width: 600px) {
+    .grid { flex-direction: column; height: auto; }
+    .col  { border-right: none; border-bottom: 1px solid #ddd; }
+    .col-body { max-height: 280px; }
+    .form-box { min-width: 100%; border-right: none; border-bottom: 1px solid #ddd; }
+  }
+  .col {
+    flex: 1; background: #fff; border-right: 1px solid #ddd;
+    display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+  }
+  .col:last-child { border-right: none; }
+  .col-header {
+    padding: 10px 14px; font-weight: bold; font-size: 13px;
+    border-bottom: 3px solid; display: flex; justify-content: space-between; flex-shrink: 0;
+  }
+  .col-header.green { border-color: #2e7d32; color: #2e7d32; }
+  .col-header.red   { border-color: #c62828; color: #c62828; }
+  .col-body { overflow-y: auto; flex: 1; }
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 7px 12px; border-bottom: 1px solid #ddd; font-size: 11px; color: #888; text-align: left; background: #fafafa; }
+  td { padding: 9px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
+  tr:hover td { background: #f9f9f9; }
+  .act { font-size: 12px; margin-right: 10px; color: #555; }
+  .act.block { color: #c62828; }
+  .act.allow { color: #2e7d32; }
+  .empty { padding: 24px 14px; color: #bbb; font-size: 13px; }
+  .hint  { font-size: 11px; color: #aaa; margin-top: 6px; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="nav-links">
+    <a href="/dashboard" class="nav-link">Live Log</a>
+    <a href="/manage" class="nav-link active">Manage Users</a>
+    <a href="/clear" class="nav-link danger" onclick="return confirm('Clear all logs?')">Clear Logs</a>
+    <span class="nav-right">
+      Admin &nbsp;|&nbsp; <a href="/logout">Logout</a>
+      &nbsp;|&nbsp; <span id="lu">–</span>
+    </span>
+  </div>
+  <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="nav-drawer" id="drawer">
+    <a href="/dashboard">Live Log</a>
+    <a href="/manage" class="active">Manage Users</a>
+    <a href="/clear" class="danger" onclick="return confirm('Clear all logs?')">Clear Logs</a>
+    <a href="/logout">Logout</a>
+  </div>
+</nav>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}{% for category, message in messages %}
+  <div class="flash {{ 'ok' if category == 'ok' else 'err' }}">{{ message }}</div>
+  {% endfor %}{% endif %}
+{% endwith %}
+<div class="controls">
+  <div class="form-box">
+    <h3>Add / Update User</h3>
+    <form method="POST" action="/manage">
+      <div class="form-row">
+        <div class="field" style="width:110px;">
+          <label>ISIC ID</label>
+          <input type="text" name="isic_id" placeholder="e.g. A1B2C3" required>
+        </div>
+        <div class="field" style="flex:1;min-width:120px;">
+          <label>Name</label>
+          <input type="text" name="name" placeholder="Full name" required>
+        </div>
+        <div class="field" style="width:100px;">
+          <label>Status</label>
+          <select name="is_allowed">
+            <option value="1">Allowed</option>
+            <option value="0">Blocked</option>
+          </select>
+        </div>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+  <div class="form-box">
+    <h3>Bulk Import</h3>
+    <form method="POST" action="/import" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".csv,.xlsx,.xls">
+      <button type="submit">Import CSV / XLSX</button>
+    </form>
+    <p class="hint">Columns: isic_id, name, is_allowed (optional, default 1)</p>
+  </div>
+</div>
+<div class="status-bar">
+  <span>Authorized: <strong style="color:#2e7d32;" id="ca">{{ authorized|length }}</strong></span>
+  <span>Blocked: <strong style="color:#c62828;" id="cb">{{ blocked|length }}</strong></span>
+</div>
+<div class="grid">
+  <div class="col">
+    <div class="col-header green">
+      <span>Authorized Users</span><span id="badge-a">{{ authorized|length }}</span>
+    </div>
+    <div class="col-body" id="col-auth">
+      {% if authorized %}
+      <table>
+        <tr><th>ID</th><th>Name</th><th>Actions</th></tr>
+        {% for u in authorized %}
+        <tr>
+          <td>{{ u.isic_id }}</td><td>{{ u.name }}</td>
+          <td>
+            <a href="/toggle/{{ u.isic_id }}" class="act block">Block</a>
+            <a href="/delete/{{ u.isic_id }}" class="act" onclick="return confirm('Delete {{ u.name }}?')">Delete</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% else %}<div class="empty">No authorized users.</div>{% endif %}
+    </div>
+  </div>
+  <div class="col">
+    <div class="col-header red">
+      <span>Blocked Users</span><span id="badge-b">{{ blocked|length }}</span>
+    </div>
+    <div class="col-body" id="col-block">
+      {% if blocked %}
+      <table>
+        <tr><th>ID</th><th>Name</th><th>Actions</th></tr>
+        {% for u in blocked %}
+        <tr>
+          <td>{{ u.isic_id }}</td><td>{{ u.name }}</td>
+          <td>
+            <a href="/toggle/{{ u.isic_id }}" class="act allow">Allow</a>
+            <a href="/delete/{{ u.isic_id }}" class="act" onclick="return confirm('Delete {{ u.name }}?')">Delete</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% else %}<div class="empty">No blocked users.</div>{% endif %}
+    </div>
+  </div>
+</div>
+<script>
+  function toggleMenu() { document.getElementById('drawer').classList.toggle('open'); }
+  const hdr = '<tr><th>ID</th><th>Name</th><th>Actions</th></tr>';
+  function rowA(u) {
+    return `<tr><td>${u.isic_id}</td><td>${u.name}</td><td>
+      <a href="/toggle/${u.isic_id}" class="act block">Block</a>
+      <a href="/delete/${u.isic_id}" class="act" onclick="return confirm('Delete?')">Delete</a>
+    </td></tr>`;
+  }
+  function rowB(u) {
+    return `<tr><td>${u.isic_id}</td><td>${u.name}</td><td>
+      <a href="/toggle/${u.isic_id}" class="act allow">Allow</a>
+      <a href="/delete/${u.isic_id}" class="act" onclick="return confirm('Delete?')">Delete</a>
+    </td></tr>`;
+  }
+  async function refresh() {
+    try {
+      const users   = await (await fetch('/api/users')).json();
+      const auth    = users.filter(u => u.is_allowed == 1);
+      const blocked = users.filter(u => u.is_allowed == 0);
+      document.getElementById('col-auth').innerHTML  = auth.length    ? `<table>${hdr}${auth.map(rowA).join('')}</table>`    : '<div class="empty">No authorized users.</div>';
+      document.getElementById('col-block').innerHTML = blocked.length ? `<table>${hdr}${blocked.map(rowB).join('')}</table>` : '<div class="empty">No blocked users.</div>';
+      document.getElementById('badge-a').textContent = auth.length;
+      document.getElementById('badge-b').textContent = blocked.length;
+      document.getElementById('ca').textContent = auth.length;
+      document.getElementById('cb').textContent = blocked.length;
+      document.getElementById('lu').textContent = new Date().toLocaleTimeString();
+    } catch(e) {}
+  }
+  refresh();
+  setInterval(refresh, 500);
+</script>
+</body>
+</html>

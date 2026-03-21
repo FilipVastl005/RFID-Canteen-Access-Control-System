@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RFID — Live Log</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: sans-serif; font-size: 14px; background: #f4f4f4; color: #222; }
+  a { text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  nav {
+    background: #222; padding: 0 16px;
+    display: flex; align-items: center; height: 48px; position: relative;
+  }
+  .nav-links { display: flex; align-items: center; gap: 16px; flex: 1; }
+  nav a.nav-link { color: #fff; font-size: 14px; white-space: nowrap; padding: 4px 0; }
+  nav a.nav-link.active { color: #f0a500; font-weight: bold; }
+  nav a.nav-link.danger { color: #e05555; }
+  .nav-right { margin-left: auto; color: #aaa; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  .nav-right a { color: #e05555; font-size: 12px; }
+  .hamburger {
+    display: none; background: none; border: none; cursor: pointer;
+    padding: 8px; margin-left: auto; flex-direction: column; gap: 5px;
+  }
+  .hamburger span { display: block; width: 22px; height: 2px; background: #fff; }
+  .nav-drawer {
+    display: none; flex-direction: column; background: #2a2a2a;
+    position: absolute; top: 48px; left: 0; right: 0; z-index: 200;
+    padding: 8px 0; border-top: 1px solid #444;
+  }
+  .nav-drawer.open { display: flex; }
+  .nav-drawer a { color: #fff; padding: 12px 20px; font-size: 14px; border-bottom: 1px solid #333; }
+  .nav-drawer a.active { color: #f0a500; }
+  .nav-drawer a.danger { color: #e05555; }
+  .nav-drawer .drawer-meta { color: #888; padding: 12px 20px; font-size: 12px; }
+  @media (max-width: 640px) {
+    .nav-links { display: none; }
+    .nav-right  { display: none; }
+    .hamburger  { display: flex; }
+  }
+  .status-bar {
+    background: #fff; border-bottom: 1px solid #ddd;
+    padding: 7px 16px; font-size: 13px; color: #555; display: flex; gap: 16px; flex-wrap: wrap;
+  }
+  .grid { display: flex; height: calc(100vh - 90px); }
+  .col {
+    flex: 1; display: flex; flex-direction: column;
+    background: #fff; border-right: 1px solid #ddd; overflow: hidden; min-width: 0;
+  }
+  .col:last-child { border-right: none; }
+  @media (max-width: 700px) {
+    .grid { flex-direction: column; height: auto; }
+    .col  { border-right: none; border-bottom: 1px solid #ddd; }
+    .col-body { max-height: 260px; }
+  }
+  .col-header {
+    padding: 10px 14px; font-weight: bold; font-size: 13px;
+    border-bottom: 3px solid; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+  }
+  .col-header.green  { border-color: #2e7d32; color: #2e7d32; }
+  .col-header.red    { border-color: #c62828; color: #c62828; }
+  .col-header.orange { border-color: #e65100; color: #e65100; }
+  .col-body { overflow-y: auto; flex: 1; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px; vertical-align: top; }
+  tr:hover td { background: #f9f9f9; }
+  .tag {
+    display: inline-block; padding: 2px 7px; border-radius: 3px;
+    font-size: 11px; font-weight: bold; white-space: nowrap;
+  }
+  .tag.allowed { background: #e8f5e9; color: #2e7d32; }
+  .tag.denied  { background: #ffebee; color: #c62828; }
+  .tag.unknown { background: #fff3e0; color: #e65100; }
+  .sub { font-size: 11px; color: #999; }
+  .empty { padding: 24px 14px; color: #bbb; font-size: 13px; }
+  .add-form {
+    border-top: 1px solid #eee; background: #fafafa;
+    padding: 10px 12px; flex-shrink: 0;
+  }
+  .add-form p { font-size: 11px; font-weight: bold; color: #e65100; margin-bottom: 6px; }
+  .add-form .fields { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+  .add-form .field  { display: flex; flex-direction: column; gap: 2px; }
+  .add-form label   { font-size: 11px; color: #888; }
+  .add-form input, .add-form select {
+    border: 1px solid #ccc; padding: 5px 7px; font-size: 13px;
+    background: #fff; color: #222; outline: none; width: 100%;
+  }
+  .add-form button {
+    background: #222; color: #fff; border: none;
+    padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  .modal-bg {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45); z-index: 300;
+    align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: #fff; padding: 24px; width: 100%; max-width: 360px;
+    border-top: 4px solid #e65100;
+  }
+  .modal h3 { font-size: 14px; margin-bottom: 14px; color: #e65100; }
+  .modal .field { margin-bottom: 10px; }
+  .modal label  { display: block; font-size: 11px; color: #888; margin-bottom: 3px; }
+  .modal input, .modal select {
+    width: 100%; border: 1px solid #ccc; padding: 8px; font-size: 16px; outline: none;
+  }
+  .modal .actions { display: flex; gap: 8px; margin-top: 14px; }
+  .modal .actions button { flex: 1; padding: 9px; font-size: 13px; cursor: pointer; border: none; }
+  .modal .btn-save   { background: #222; color: #fff; }
+  .modal .btn-cancel { background: #eee; color: #222; }
+  .add-btn {
+    font-size: 11px; background: #e65100; color: #fff;
+    border: none; padding: 3px 8px; cursor: pointer; border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+<nav>
+  <div class="nav-links">
+    <a href="/dashboard" class="nav-link active">Live Log</a>
+    <a href="/manage" class="nav-link">Manage Users</a>
+    <a href="/clear" class="nav-link danger" onclick="return confirm('Clear all logs?')">Clear Logs</a>
+    <span class="nav-right">
+      Admin &nbsp;|&nbsp; <a href="/logout">Logout</a>
+      &nbsp;|&nbsp; <span id="lu">–</span>
+    </span>
+  </div>
+  <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="nav-drawer" id="drawer">
+    <a href="/dashboard" class="active">Live Log</a>
+    <a href="/manage">Manage Users</a>
+    <a href="/clear" class="danger" onclick="return confirm('Clear all logs?')">Clear Logs</a>
+    <a href="/logout">Logout</a>
+    <span class="drawer-meta">Updated: <span id="lu2">–</span></span>
+  </div>
+</nav>
+<div class="status-bar">
+  <span>Granted: <strong style="color:#2e7d32;" id="sg">{{ granted|length }}</strong></span>
+  <span>Denied: <strong style="color:#c62828;" id="sd">{{ denied|length }}</strong></span>
+  <span>Unknown: <strong style="color:#e65100;" id="su">{{ unknown|length }}</strong></span>
+</div>
+<div class="grid">
+  <div class="col">
+    <div class="col-header green">
+      <span>Granted</span><span id="badge-g">{{ granted|length }}</span>
+    </div>
+    <div class="col-body" id="col-granted">
+      {% if granted %}<table>{% for r in granted %}
+      <tr>
+        <td>{{ r.name }}<br><span class="sub">{{ r.isic_id }}</span></td>
+        <td class="sub">{{ r.timestamp }}</td>
+        <td><span class="tag allowed">ALLOWED</span></td>
+      </tr>{% endfor %}</table>
+      {% else %}<div class="empty">No entries yet.</div>{% endif %}
+    </div>
+  </div>
+  <div class="col">
+    <div class="col-header red">
+      <span>Denied</span><span id="badge-d">{{ denied|length }}</span>
+    </div>
+    <div class="col-body" id="col-denied">
+      {% if denied %}<table>{% for r in denied %}
+      <tr>
+        <td>{{ r.name }}<br><span class="sub">{{ r.isic_id }}</span></td>
+        <td class="sub">{{ r.timestamp }}</td>
+        <td><span class="tag denied">DENIED</span></td>
+      </tr>{% endfor %}</table>
+      {% else %}<div class="empty">No entries yet.</div>{% endif %}
+    </div>
+  </div>
+  <div class="col">
+    <div class="col-header orange">
+      <span>Unknown</span><span id="badge-u">{{ unknown|length }}</span>
+    </div>
+    <div class="col-body" id="col-unknown">
+      {% if unknown %}<table>{% for r in unknown %}
+      <tr>
+        <td><span class="sub">{{ r.isic_id }}</span><br><span class="sub">{{ r.timestamp }}</span></td>
+        <td><span class="tag unknown">UNKNOWN</span></td>
+        <td><button class="add-btn" onclick="openModal('{{ r.isic_id }}')">+ Add</button></td>
+      </tr>{% endfor %}</table>
+      {% else %}<div class="empty">No unknown cards.</div>{% endif %}
+    </div>
+    <div class="add-form">
+      <p>Register Unknown Card</p>
+      <form method="POST" action="/manage">
+        <div class="fields">
+          <div class="field" style="width:100px;">
+            <label>Card ID</label>
+            <input type="text" name="isic_id" placeholder="ID" required>
+          </div>
+          <div class="field" style="flex:1;min-width:90px;">
+            <label>Name</label>
+            <input type="text" name="name" placeholder="Full name" required>
+          </div>
+          <div class="field" style="width:80px;">
+            <label>Status</label>
+            <select name="is_allowed">
+              <option value="1">Allow</option>
+              <option value="0">Block</option>
+            </select>
+          </div>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
+  <div class="modal">
+    <h3>Register Unknown Card</h3>
+    <form method="POST" action="/manage">
+      <div class="field">
+        <label>Card ID</label>
+        <input type="text" name="isic_id" id="modal-id" readonly>
+      </div>
+      <div class="field">
+        <label>Full Name *</label>
+        <input type="text" name="name" id="modal-name" placeholder="e.g. Jane Smith" required>
+      </div>
+      <div class="field">
+        <label>Status</label>
+        <select name="is_allowed">
+          <option value="1">Allowed</option>
+          <option value="0">Blocked</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn-save">Save User</button>
+        <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+  function toggleMenu() { document.getElementById('drawer').classList.toggle('open'); }
+  function openModal(id) {
+    document.getElementById('modal-id').value = id;
+    document.getElementById('modal-name').value = '';
+    document.getElementById('modal-bg').classList.add('open');
+    setTimeout(() => document.getElementById('modal-name').focus(), 50);
+  }
+  function closeModal(e) {
+    if (!e || e.target === document.getElementById('modal-bg'))
+      document.getElementById('modal-bg').classList.remove('open');
+  }
+  function rowG(r) {
+    return `<tr><td>${r.name}<br><span class="sub">${r.isic_id}</span></td><td class="sub">${r.timestamp}</td><td><span class="tag allowed">ALLOWED</span></td></tr>`;
+  }
+  function rowD(r) {
+    return `<tr><td>${r.name}<br><span class="sub">${r.isic_id}</span></td><td class="sub">${r.timestamp}</td><td><span class="tag denied">DENIED</span></td></tr>`;
+  }
+  function rowU(r) {
+    return `<tr><td><span class="sub">${r.isic_id}</span><br><span class="sub">${r.timestamp}</span></td><td><span class="tag unknown">UNKNOWN</span></td><td><button class="add-btn" onclick="openModal('${r.isic_id}')">+ Add</button></td></tr>`;
+  }
+  async function refresh() {
+    try {
+      const logs    = await (await fetch('/api/logs')).json();
+      const granted = logs.filter(r => r.status === 'ALLOWED');
+      const denied  = logs.filter(r => r.status === 'DENIED');
+      const unknown = logs.filter(r => r.status === 'UNKNOWN');
+      document.getElementById('col-granted').innerHTML = granted.length ? `<table>${granted.map(rowG).join('')}</table>` : '<div class="empty">No entries yet.</div>';
+      document.getElementById('col-denied').innerHTML  = denied.length  ? `<table>${denied.map(rowD).join('')}</table>`  : '<div class="empty">No entries yet.</div>';
+      document.getElementById('col-unknown').innerHTML = unknown.length ? `<table>${unknown.map(rowU).join('')}</table>` : '<div class="empty">No unknown cards.</div>';
+      document.getElementById('badge-g').textContent = granted.length;
+      document.getElementById('badge-d').textContent = denied.length;
+      document.getElementById('badge-u').textContent = unknown.length;
+      document.getElementById('sg').textContent = granted.length;
+      document.getElementById('sd').textContent = denied.length;
+      document.getElementById('su').textContent = unknown.length;
+      const t = new Date().toLocaleTimeString();
+      document.getElementById('lu').textContent  = t;
+      document.getElementById('lu2').textContent = t;
+    } catch(e) {}
+  }
+  refresh();
+  setInterval(refresh, 500);
+</script>
+</body>
+</html>

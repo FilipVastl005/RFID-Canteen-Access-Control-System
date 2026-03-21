@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canteen Access</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: sans-serif; background: #f4f4f4; color: #222;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .card { background: #fff; border: 1px solid #ddd; padding: 32px 28px; width: 100%; max-width: 420px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { font-size: 13px; color: #888; margin-bottom: 28px; }
+  .roles { display: flex; gap: 12px; margin-bottom: 24px; }
+  .role-btn {
+    flex: 1; padding: 16px 10px; border: 2px solid #ddd; background: #fff;
+    cursor: pointer; text-align: center; font-family: sans-serif; color: #555;
+    touch-action: manipulation;
+  }
+  .role-btn .icon  { font-size: 24px; display: block; margin-bottom: 6px; }
+  .role-btn .label { font-weight: bold; font-size: 14px; display: block; }
+  .role-btn .hint  { font-size: 11px; color: #aaa; display: block; margin-top: 3px; }
+  .role-btn.selected-guest { border-color: #2e7d32; color: #2e7d32; background: #f1f8f1; }
+  .role-btn.selected-admin { border-color: #1565c0; color: #1565c0; background: #f0f4ff; }
+  #admin-section { display: none; margin-bottom: 20px; }
+  #admin-section label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
+  #admin-section input {
+    width: 100%; border: 1px solid #ccc; padding: 10px;
+    font-size: 16px; outline: none; color: #222;
+  }
+  #admin-section input:focus { border-color: #1565c0; }
+  .error {
+    background: #ffebee; color: #c62828; border: 1px solid #ef9a9a;
+    padding: 8px 12px; font-size: 13px; margin-bottom: 16px; display: none;
+  }
+  .error.show { display: block; }
+  #submit-btn {
+    width: 100%; padding: 12px; font-size: 15px; font-family: sans-serif;
+    background: #222; color: #fff; border: none; cursor: pointer; touch-action: manipulation;
+  }
+  #submit-btn:disabled { background: #ccc; cursor: default; }
+  .footer-note { margin-top: 16px; font-size: 11px; color: #bbb; text-align: center; }
+  @media (max-width: 400px) {
+    .card { padding: 24px 16px; }
+    .role-btn .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🍽 Canteen Access</h1>
+  <p class="sub">Choose how you want to continue</p>
+  <div class="roles">
+    <button class="role-btn" id="btn-guest" onclick="selectRole('guest')">
+      <span class="icon">👤</span>
+      <span class="label">Student</span>
+      <span class="hint">View canteen status</span>
+    </button>
+    <button class="role-btn" id="btn-admin" onclick="selectRole('admin')">
+      <span class="icon">🔒</span>
+      <span class="label">Admin</span>
+      <span class="hint">Full dashboard</span>
+    </button>
+  </div>
+  <div id="error-box" class="error"></div>
+  <div id="admin-section">
+    <label for="password">Admin Password</label>
+    <input type="password" id="password" placeholder="Enter admin password"
+           onkeydown="if(event.key==='Enter') doLogin()">
+  </div>
+  <button id="submit-btn" onclick="doLogin()" disabled>Select a role above</button>
+  <p class="footer-note">RFID Access Control System</p>
+</div>
+<script>
+  let selectedRole = null;
+  function selectRole(role) {
+    selectedRole = role;
+    document.getElementById('btn-guest').className = 'role-btn';
+    document.getElementById('btn-admin').className = 'role-btn';
+    document.getElementById('error-box').classList.remove('show');
+    if (role === 'guest') {
+      document.getElementById('btn-guest').className = 'role-btn selected-guest';
+      document.getElementById('admin-section').style.display = 'none';
+      document.getElementById('submit-btn').disabled = false;
+      document.getElementById('submit-btn').textContent = 'Enter as Student';
+      document.getElementById('submit-btn').style.background = '#2e7d32';
+    } else {
+      document.getElementById('btn-admin').className = 'role-btn selected-admin';
+      document.getElementById('admin-section').style.display = 'block';
+      document.getElementById('submit-btn').disabled = false;
+      document.getElementById('submit-btn').textContent = 'Login as Admin';
+      document.getElementById('submit-btn').style.background = '#1565c0';
+      setTimeout(() => document.getElementById('password').focus(), 50);
+    }
+  }
+  function doLogin() {
+    if (!selectedRole) return;
+    if (selectedRole === 'guest') { window.location.href = '/canteen'; return; }
+    const pw = document.getElementById('password').value;
+    if (!pw) {
+      document.getElementById('error-box').textContent = 'Please enter the admin password.';
+      document.getElementById('error-box').classList.add('show');
+      return;
+    }
+    fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        window.location.href = '/dashboard';
+      } else {
+        document.getElementById('error-box').textContent = 'Wrong password. Try again.';
+        document.getElementById('error-box').classList.add('show');
+        document.getElementById('password').value = '';
+        document.getElementById('password').focus();
+      }
+    });
+  }
+</script>
+</body>
+</html>
