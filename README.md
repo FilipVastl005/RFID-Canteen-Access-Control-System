@@ -218,7 +218,3 @@ At the top of either `.ino` file, comment out the define to target ESP8266:
 ```
 
 ---
-
-## License
-
-MIT
